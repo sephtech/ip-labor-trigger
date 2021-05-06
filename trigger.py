@@ -1,5 +1,8 @@
 from tkinter import *
 from pynput import mouse
+from win32com.client import Dispatch
+from subprocess import DEVNULL
+import subprocess
 import threading
 import pythoncom
 import tkinter as ttk
@@ -28,8 +31,8 @@ class HFU_Trigger_Server():
         try:
             #checks if admin rights are present
             if self.check_elevation():
-                #creates a seperate Thread for the actual TCP/IP Server
-                self.server_thread = threading.Thread(name='server_thread', target=self.run_server)
+                #creates a placeholder Thread for the actual TCP/IP Server
+                self.server_thread = None
 
                 #searches for physical network adapters
                 logging.debug("Extracting physical network devices...")
@@ -187,6 +190,8 @@ class HFU_Trigger_Server():
         logging.info("Starting server thread...")
         global stop_threads
         stop_threads = False
+        #creates a seperate Thread for the actual TCP/IP Server
+        self.server_thread = threading.Thread(name='server_thread', target=self.run_server)
         self.server_thread.start()
 
     def button_stop(self, *args):
@@ -233,14 +238,14 @@ class HFU_Trigger_Server():
 
         param *args -> arguments passed by the button
         '''
-
+        
         logging.info("Resetting network and firewall options...")
 
         #resets the network configuration to DHCP
         ip, port = self.set_network_options(self.tkvar_device.get(), self.tkvar_network.get(), False)
 
         #resets the firewall configuration
-        self.set_firewall_rule(self.tkvar_device.get(), port, False)
+        self.set_firewall_rule(port, False)
 
     def change_advanced(self, *args):
         '''
@@ -321,32 +326,77 @@ class HFU_Trigger_Server():
 
                 #reset configuration
                 else:
-
-                    pass
-                    #exit_code = wmi_config[0].EnableDHCP()
-                    #if exit_code == 0:
-                    #    logging.info(f"Changed network configuration of {network_adapter}\n\tto DHCP"")
-                    #    print(f"Changed network configuration of {network_adapter}\n\tto DHCP")
-
-                    #else:
-                    #    logging.warning(f"Change of network configuration to DHCP\n\tfailed because adapter is not connected.")
-                    #    print(f"Change of network configuration to DHCP\n\tfailed because adapter is not connected.")
+                    test = proc_check_present = subprocess.run(
+                        [
+                            'netsh', 'interface', 'ipv4', 'set',
+                            'address', f'name={nic.NetConnectionID}', 'source=dhcp'
+                        ],
+                        capture_output=True
+                    )
+                    
+                    logging.info(f"Changed network configuration of {network_adapter}\n\tto DHCP")
+                    print(f"Changed network configuration of {network_adapter}\n\tto DHCP")
                 
                 break
         
         #returns selected ip and port in a list
         return (ip, port)
 
-    def set_firewall_rule(self, device_name, port, set_firewall=True):
+    def set_firewall_rule(self, port, set_firewall=True):
         '''
         Sets or resets the firewall configuration
 
-        param device_name   -> name of the device the server runs for
         param port          -> name of the port
-        param set_network   -> set or reset the firewall adapter? True => set; False => reset
+        param set_firewall   -> set or reset the firewall adapter? True => set; False => reset
         '''
 
-        logging.info(f"Changing firewall configuration for {device_name} on port {port}...")
+        logging.info(f"Changing firewall configuration on port {port}...")
+        logging.debug(f"Checking if firewall rule on port {port} is present...")
+
+        #checking if firewall already exist
+        proc_check_present = subprocess.run(
+            [
+                'netsh', 'advfirewall', 'firewall',
+                'show', 'rule', 'name=HFU_Trigger_Server'
+            ], 
+            check=True,
+            capture_output=True
+        )
+
+        proc_output_list = proc_check_present.stdout.decode("ISO-8859-1").split("\r\n")
+        proc_output_list = [i for i in proc_output_list if i]
+
+        if (proc_output_list[-1] != "OK."):
+            #creating new firewall rule if it doesn't exist
+            logging.info(f'Creating new firewall rule on port {10001} with the name "HFU_Trigger_Server"...')
+
+            subprocess.run(
+                [
+                    'netsh', 'advfirewall', 'firewall',
+                    'add', 'rule', 'name=HFU_Trigger_Server',
+                    'dir=in', 'action=allow', 'enable=no', 
+                    'protocol=TCP', f'localport={port}'
+                ], 
+                check=True, 
+                capture_output=True
+            )
+
+            print(f'New firewall rule on port {10001} with the name "HFU_Trigger_Server" created.')
+
+        #enabling or disabling the present firewall rule
+        logging.info(f'Setting firewall rule with name "HFU_Trigger_Server" to {"enabled" if set_firewall else "disabled"}...')
+
+        subprocess.run(
+            [
+                'netsh', 'advfirewall', 'firewall',
+                'set', 'rule', 'name=HFU_Trigger_Server',
+                'new', f'enable={"yes" if set_firewall else "no"}'
+            ],
+            check=True,
+            capture_output=True
+        )
+
+        print(f'Changed Firewall rule with name "HFU_Trigger_Server" to {"enabled" if set_firewall else "disabled"}.')
 
     def print_description(self, device_name):
         '''
@@ -398,6 +448,8 @@ class HFU_Trigger_Server():
 
         #configuration of network
         ip, port = self.set_network_options(device_name, self.tkvar_network.get())
+        #configuration of the firewall
+        self.set_firewall_rule(port)
         #prints the device description
         self.print_description(device_name)
 
@@ -415,6 +467,10 @@ class HFU_Trigger_Server():
 
         #starts to listen on the socket
         sock.listen(1)
+
+        #connects to the fNIRS DCOM device
+        if device_name == 'fNIRS':
+            oxysoft = Dispatch("OxySoft.OxyApplication")
 
         #creates mouse object for click actions
         mouse_object = mouse.Controller()
@@ -467,7 +523,7 @@ class HFU_Trigger_Server():
 
                 #chooses the current device
                 if device_name == 'fNIRS':
-                    self.trigger_fnirs(trigger_parts)
+                    self.trigger_fnirs(trigger_parts, oxysoft)
                 elif device_name == 'Movisens EKG/EDA':
                     self.trigger_movisens(trigger_parts)
                 elif device_name == 'Eyetracker':
@@ -488,7 +544,7 @@ class HFU_Trigger_Server():
             finally:
                 connection.close()
 
-    def trigger_fnirs(self, message):
+    def trigger_fnirs(self, message, oxysoft):
         '''
         Performs the trigger action on this device for the fNIRS Software
         Sends trigger to DCOM device
@@ -496,7 +552,7 @@ class HFU_Trigger_Server():
         param message -> received trigger message from the remot client
         '''
 
-        pass
+        oxysoft.WriteEvent(message[0], message[1])
 
     def trigger_motion(self, message, mouse_object):
         '''

@@ -1,5 +1,6 @@
 from tkinter import *
 from pynput import mouse
+from win32com.client import Dispatch
 from subprocess import DEVNULL
 import subprocess
 import threading
@@ -30,8 +31,8 @@ class HFU_Trigger_Server():
         try:
             #checks if admin rights are present
             if self.check_elevation():
-                #creates a seperate Thread for the actual TCP/IP Server
-                self.server_thread = threading.Thread(name='server_thread', target=self.run_server)
+                #creates a placeholder Thread for the actual TCP/IP Server
+                self.server_thread = None
 
                 #searches for physical network adapters
                 logging.debug("Extracting physical network devices...")
@@ -189,6 +190,8 @@ class HFU_Trigger_Server():
         logging.info("Starting server thread...")
         global stop_threads
         stop_threads = False
+        #creates a seperate Thread for the actual TCP/IP Server
+        self.server_thread = threading.Thread(name='server_thread', target=self.run_server)
         self.server_thread.start()
 
     def button_stop(self, *args):
@@ -323,16 +326,16 @@ class HFU_Trigger_Server():
 
                 #reset configuration
                 else:
-
-                    pass
-                    #exit_code = wmi_config[0].EnableDHCP()
-                    #if exit_code == 0:
-                    #    logging.info(f"Changed network configuration of {network_adapter}\n\tto DHCP"")
-                    #    print(f"Changed network configuration of {network_adapter}\n\tto DHCP")
-
-                    #else:
-                    #    logging.warning(f"Change of network configuration to DHCP\n\tfailed because adapter is not connected.")
-                    #    print(f"Change of network configuration to DHCP\n\tfailed because adapter is not connected.")
+                    test = proc_check_present = subprocess.run(
+                        [
+                            'netsh', 'interface', 'ipv4', 'set',
+                            'address', f'name={nic.NetConnectionID}', 'source=dhcp'
+                        ],
+                        capture_output=True
+                    )
+                    
+                    logging.info(f"Changed network configuration of {network_adapter}\n\tto DHCP")
+                    print(f"Changed network configuration of {network_adapter}\n\tto DHCP")
                 
                 break
         
@@ -356,7 +359,7 @@ class HFU_Trigger_Server():
                 'netsh', 'advfirewall', 'firewall',
                 'show', 'rule', 'name=HFU_Trigger_Server'
             ], 
-            check=True,
+            #check=True,
             capture_output=True
         )
 
@@ -465,6 +468,10 @@ class HFU_Trigger_Server():
         #starts to listen on the socket
         sock.listen(1)
 
+        #connects to the fNIRS DCOM device
+        if device_name == 'fNIRS':
+            oxysoft = Dispatch("OxySoft.OxyApplication")
+
         #creates mouse object for click actions
         mouse_object = mouse.Controller()
         #saves the server start time
@@ -479,10 +486,10 @@ class HFU_Trigger_Server():
             try:
                 connection, client_address = sock.accept()
 
-            finally:
+            except:
                 logging.info("Socket closed.")
                 print('Socket closed...')
-                break
+                break                
 
             #waits for server stop action
             global stop_threads
@@ -516,9 +523,9 @@ class HFU_Trigger_Server():
 
                 #chooses the current device
                 if device_name == 'fNIRS':
-                    self.trigger_fnirs(trigger_parts)
+                    self.trigger_fnirs(trigger_parts, oxysoft)
                 elif device_name == 'Movisens EKG/EDA':
-                    self.trigger_movisens(trigger_parts)
+                    self.trigger_movisens(trigger_parts, start_time)
                 elif device_name == 'Eyetracker':
                     self.trigger_eyetracker(trigger_parts)
                 elif device_name == 'Motiontracker/EMG':
@@ -537,7 +544,7 @@ class HFU_Trigger_Server():
             finally:
                 connection.close()
 
-    def trigger_fnirs(self, message):
+    def trigger_fnirs(self, message, oxysoft):
         '''
         Performs the trigger action on this device for the fNIRS Software
         Sends trigger to DCOM device
@@ -545,7 +552,7 @@ class HFU_Trigger_Server():
         param message -> received trigger message from the remot client
         '''
 
-        pass
+        oxysoft.WriteEvent(message[0], message[1])
 
     def trigger_motion(self, message, mouse_object):
         '''
@@ -559,14 +566,19 @@ class HFU_Trigger_Server():
         #perform mouse click
         mouse_object.click(mouse.Button.left, 1)
 
-    def trigger_movisens(self, message):
+    def trigger_movisens(self, message, start_time):
         '''
         Performs the trigger action on this device for the Movisens Software
+        Saves trigger with timestamp in seperate file
 
-        param message -> received trigger message from the remot client
+        param message   -> received trigger message from the remot client
+        start_time      -> trigger time to store in the file
         '''
 
-        pass
+        # stores the trigger in the file
+        file = open("".join((str(start_time), ".csv")),"a")
+        file.write("".join((str(int(round(time.time() * 1000))), ";", message[0], ";", message[1], "\r")))
+        file.close()
 
     def trigger_driving(self, message, start_time):
         '''
@@ -579,7 +591,7 @@ class HFU_Trigger_Server():
 
         # stores the trigger in the file
         file = open("".join((str(start_time), ".csv")),"a")
-        file.write("".join((str(int(round(time.time() * 1000))), ";", message[0], ";", message[1])))
+        file.write("".join((str(int(round(time.time() * 1000))), ";", message[0], ";", message[1], "\r")))
         file.close()
 
     def trigger_eyetracker(self, message):

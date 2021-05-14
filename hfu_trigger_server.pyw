@@ -1,11 +1,11 @@
 from tkinter import *
+from tkinter import ttk
 from pynput import mouse
 from win32com.client import Dispatch
 from subprocess import DEVNULL
 import subprocess
 import threading
 import pythoncom
-import tkinter as ttk
 import logging
 import wmi
 import ctypes
@@ -48,7 +48,7 @@ class HFU_Trigger_Server():
                 logging.debug("Creating GUI Frame...")
                 self.root = Tk()
                 self.root.title("Trigger Server")
-                self.root.minsize(300, 450)
+                self.root.minsize(750, 612)
                 self.build_gui()
                 self.root.mainloop()
 
@@ -116,42 +116,67 @@ class HFU_Trigger_Server():
         Label(mainframe, text="").grid(row = 3, column = 1)
         self.popupMenu2 = OptionMenu(mainframe, self.tkvar_network, *choices_network)
         self.label_popup2 = Label(mainframe, text="Choose the network adapter")
-        self.label_popup2.grid(row = 4, column = 1)
-        self.popupMenu2.grid(row = 5, column =1)
+        self.label_popup2.grid(row = 1, column = 2)
+        self.popupMenu2.grid(row = 2, column =2)
 
-        #chackbox for advanced usage
-        Label(mainframe, text="").grid(row = 6, column = 1)
+        #start/stop button
+        Label(mainframe, text="").grid(row = 3, column = 2)
+        ttk.Separator(mainframe,orient=HORIZONTAL).grid(row=4, column=1, columnspan=2, sticky="ew")
+        Label(mainframe, text="").grid(row = 5, column = 1, columnspan=2)
+        self.btn_start = Button(mainframe, text = "Start", command = self.button_start)
+        self.btn_start.grid(row = 6, column = 1)
+        self.btn_stop = Button(mainframe, text = "Stop", state = DISABLED, command = self.button_stop)
+        self.btn_stop.grid(row = 7, column = 1)
+
+        #reset button
+        self.label_reset = Label(mainframe, text = "Reset network configuration for\nthe selected network adapter.", height = 2)
+        self.label_reset.grid(row = 6, column = 2)
+        self.btn_reset = Button(mainframe, text = "Reset", command = self.button_reset)
+        self.btn_reset.grid(row = 7, column = 2)
+
+        #checkbox for advanced usage
+        Label(mainframe, text="", height=1).grid(row = 8, column = 1, columnspan=2)
+        ttk.Separator(mainframe,orient=HORIZONTAL).grid(row=9, column=1, columnspan=2, sticky="ew")
         self.check_btn = Checkbutton(mainframe, text = "Advanced Options", variable = self.tkvar_advanced, onvalue = 1, offvalue = 0, height=2, width = 20)
-        self.check_btn.grid(row = 7, column = 1)
+        self.check_btn.grid(row = 10, column = 1, columnspan=2)
 
         #ip input
         self.label_ip = Label(mainframe, text="IP address:", width = 15, fg = "gray")
-        self.label_ip.grid(row = 8, column = 1)
+        self.label_ip.grid(row = 11, column = 1, columnspan=2)
         self.text_ip = Text(mainframe, state = DISABLED, height = 1, width = 15, bg = "light gray")
-        self.text_ip.grid(row = 9, column = 1)
+        self.text_ip.grid(row = 12, column = 1, columnspan=2)
 
         #port input
         self.label_port = Label(mainframe, text="Port:", width = 15, fg = "gray")
-        self.label_port.grid(row = 10, column = 1)
+        self.label_port.grid(row = 13, column = 1, columnspan=2)
         self.text_port = Text(mainframe, state = DISABLED, height = 1, width = 15, bg = "light gray")
-        self.text_port.grid(row = 11, column = 1)
+        self.text_port.grid(row = 14, column = 1, columnspan=2)
 
-        #start/stop button
-        Label(mainframe, text="").grid(row = 12, column = 1)
-        self.btn_start = Button(mainframe, text = "Start", command = self.button_start)
-        self.btn_start.grid(row = 13, column = 1)
-        self.btn_stop = Button(mainframe, text = "Stop", state = DISABLED, command = self.button_stop)
-        self.btn_stop.grid(row = 14, column = 1)
+        #console text view
+        Label(mainframe, text="").grid(row = 15, column = 1, columnspan=2)
+        ttk.Separator(mainframe,orient=HORIZONTAL).grid(row=16, column=1, columnspan=2, sticky="ew")
+        Label(mainframe, text="", height=1).grid(row = 17, column = 1, columnspan=2)
+        self.console_text = Text(mainframe, height=10)
+        self.console_text.grid(row = 18, column = 1, columnspan=2)
 
-        #reset button
-        Label(mainframe, text="").grid(row = 15, column = 1)
-        self.label_reset = Label(mainframe, text = "Reset network configuration for\nthe selected network adapter.\nOnly if adapter is connected!", height = 3)
-        self.label_reset.grid(row = 16, column = 1)
-        self.btn_reset = Button(mainframe, text = "Reset", command = self.button_reset)
-        self.btn_reset.grid(row = 17, column = 1)
+        #redirecting standard output and standard error to console text view
+        redir = RedirectText(self.console_text)
+        sys.stdout = redir
+        sys.stderr = redir
 
         #trace for the advance usage checkbox
         self.tkvar_advanced.trace('w', self.change_advanced)
+
+        #set default exit on close operation
+        self.root.protocol("WM_DELETE_WINDOW", self.close_application)
+
+    def close_application(self):
+        '''
+        Method for the default close operation of the application window
+        '''
+        
+        self.button_reset()
+        self.root.destroy()
         
     def button_start(self, *args):
         '''
@@ -208,9 +233,9 @@ class HFU_Trigger_Server():
         global sock
         stop_threads = True
         sock.close()
-        self.server_thread.join()
 
-        print('\nServer stopped...')
+        self.console_text.insert(END, '\nServer stopped...\n')
+        self.console_text.see("end")
 
         #enables buttons and dropdowns
         self.popupMenu['state'] = NORMAL
@@ -322,7 +347,8 @@ class HFU_Trigger_Server():
                     wmi_config[0].EnableStatic(IPAddress=[ip],SubnetMask=[network_options['netmask']])
                     wmi_config[0].SetGateways(DefaultIPGateway=[network_options['gateway']])
                     logging.info(f"Changed network configuration of {network_adapter}\n\tto ip-{network_options['ip']}; netmask-{network_options['netmask']}; gateway-{network_options['gateway']}")
-                    print(f"Changed network configuration of {network_adapter}\n\tto ip-{network_options['ip']}; netmask-{network_options['netmask']}; gateway-{network_options['gateway']}")
+                    self.console_text.insert(END, f"Changed network configuration of {network_adapter}\n\tto ip-{network_options['ip']}; netmask-{network_options['netmask']}; gateway-{network_options['gateway']}\n")
+                    self.console_text.see("end")
 
                 #reset configuration
                 else:
@@ -335,7 +361,8 @@ class HFU_Trigger_Server():
                     )
                     
                     logging.info(f"Changed network configuration of {network_adapter}\n\tto DHCP")
-                    print(f"Changed network configuration of {network_adapter}\n\tto DHCP")
+                    self.console_text.insert(END, f"Changed network configuration of {network_adapter}\n\tto DHCP\n")
+                    self.console_text.see("end")
                 
                 break
         
@@ -381,7 +408,8 @@ class HFU_Trigger_Server():
                 capture_output=True
             )
 
-            print(f'New firewall rule on port {10001} with the name "HFU_Trigger_Server" created.')
+            self.console_text.insert(END, f'New firewall rule on port {10001} with the name "HFU_Trigger_Server" created.\n')
+            self.console_text.see("end")
 
         #enabling or disabling the present firewall rule
         logging.info(f'Setting firewall rule with name "HFU_Trigger_Server" to {"enabled" if set_firewall else "disabled"}...')
@@ -396,7 +424,8 @@ class HFU_Trigger_Server():
             capture_output=True
         )
 
-        print(f'Changed Firewall rule with name "HFU_Trigger_Server" to {"enabled" if set_firewall else "disabled"}.')
+        self.console_text.insert(END, f'Changed Firewall rule with name "HFU_Trigger_Server" to {"enabled" if set_firewall else "disabled"}.\n')
+        self.console_text.see("end")
 
     def print_description(self, device_name):
         '''
@@ -413,14 +442,17 @@ class HFU_Trigger_Server():
             'fNIRS': 'Start Oxysoft with administrator rights.\n'
                         'Start a measurement and change to the XXXX view.\n'
                         'Send a test trigger and check if it arrived.',
-            'Movisens EKG/EDA': 'Coming soon...',
+            'Movisens EKG/EDA': 'Start the measurement in Movisens Sensor Manager.\n'
+                                    'Send a test trigger and check if it arrived.\n'
+                                    'The triggers will be stored in this directory as csv files.\n'
+                                    'You have to restart this server for every participant.',
             'Eyetracker': 'Coming soon...',
             'Motiontracker/EMG': 'Start CAPTIV with administrator rights.\n'
                                     'Start a measurement and place the cursor above the trigger button.\n'
                                     'Make sure that the CAPTIV window is in foreground.\n'
                                     'Send a test trigger and check if the trigger value in CAPTIV increased.\n'
                                     '\n'
-                                    'WARNING: The highest trigger value is XXX. The following trigger will\n'
+                                    'WARNING: The highest trigger value is 256. The following trigger will\n'
                                     'reset the value and stop the measurement. Make sure you have enough\n'
                                     'trigger values left!',
             'Fahrsimulator': 'Start the driving simulator.\n'
@@ -430,9 +462,9 @@ class HFU_Trigger_Server():
         }
 
         #prints the description
-        print('\nDESCRIPTION:')
-        print(switcher.get(device_name))
-        print('\n')
+        self.console_text.insert(END, '\nDESCRIPTION:\n')
+        self.console_text.insert(END, f"{switcher.get(device_name)}\n\n")
+        self.console_text.see("end")
 
     def run_server(self):
         '''
@@ -460,8 +492,9 @@ class HFU_Trigger_Server():
         global sock
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_address = (ip, port)
-        print(f'Server for {device_name} selected...')
-        print('Starting up trigger server on %s on %s' % server_address)
+        self.console_text.insert(END, f'Server for {device_name} selected...\n')
+        self.console_text.insert(END, 'Starting up trigger server on %s on %s\n' % server_address)
+        self.console_text.see("end")
         logging.info('Starting up trigger server on %s on %s' % server_address)
         sock.bind(server_address)
 
@@ -482,13 +515,15 @@ class HFU_Trigger_Server():
         #waiting for incoming connection
         while True:
 
-            print('Waiting for connection')
+            self.console_text.insert(END, 'Waiting for connection\n')
+            self.console_text.see("end")
             try:
                 connection, client_address = sock.accept()
 
             except:
                 logging.info("Socket closed.")
-                print('Socket closed...')
+                self.console_text.insert(END, 'Socket closed...\n')
+                self.console_text.see("end")
                 break                
 
             #waits for server stop action
@@ -498,19 +533,23 @@ class HFU_Trigger_Server():
             
             try:
                 trigger_count = trigger_count + 1
-                print('Connection from', client_address)
+                self.console_text.insert(END, 'Connection from', client_address, '\n')
+                self.console_text.see("end")
                 received_message = ""
                 
                 while True:
                     data = connection.recv(32)
-                    print('Received "%s"' % data)
+                    self.console_text.insert(END, 'Received "%s"' % data)
+                    self.console_text.see("end")
                     received_message = "".join((received_message, data.decode("utf-8")))
                     
                     if data:
-                        print('Sending data back to the client')
+                        self.console_text.insert(END, 'Sending data back to the client\n')
+                        self.console_text.see("end")
                         connection.sendall(data)
                     else:
-                        print('No more data from ', client_address)
+                        self.console_text.insert(END, 'No more data from ', client_address, '\n')
+                        self.console_text.see("end")
                         break
                 
                 #performs the trigger and sved the internal latency
@@ -519,7 +558,8 @@ class HFU_Trigger_Server():
                 trigger_parts = received_message.split("%SEP%")
 
                 logging.info(f"Performing trigger {trigger_count} for device {device_name}.")
-                print(f"Performing trigger {trigger_count} for device {device_name}.")
+                self.console_text.insert(END, f"Performing trigger {trigger_count} for device {device_name}.\n")
+                self.console_text.see("end")
 
                 #chooses the current device
                 if device_name == 'fNIRS':
@@ -536,7 +576,8 @@ class HFU_Trigger_Server():
                 #calculation of internal latency
                 internal_latency = int(round(time.time() * 1000)) - internal_latency_start
                 logging.info(f"Trigger {trigger_count} for device {device_name} performed. Internal latnecy - {internal_latency}ms\n")
-                print(f"Trigger {trigger_count} for device {device_name} performed. Internal latnecy - {internal_latency}ms\n")
+                self.console_text.insert(END, f"Trigger {trigger_count} for device {device_name} performed. Internal latency - {internal_latency}ms\n\n")
+                self.console_text.see("end")
 
             except:
                 logging.exception("ERROR during trigger performance")
@@ -603,6 +644,33 @@ class HFU_Trigger_Server():
 
         pass
 
+class RedirectText(object):
+    '''
+    Class for redirecting stdout and stderr to a text view
+    '''
+
+    def __init__(self, text_ctrl):
+        '''
+        Constructor for the redirector
+        '''
+
+        #setting the text view
+        self.output = text_ctrl
+        
+    def write(self, string):
+        '''
+        Write a message to the text view
+        '''
+
+        #writes given text to text view
+        self.output.insert(END, string)
+        self.output.see("end")
+
+    def flush(self):
+        '''
+        Passes the standard flush method of the sys output
+        '''
+        pass
 
 #starts the trigger server program
 tr_srv = HFU_Trigger_Server()

@@ -1,1 +1,1 @@
-Python39\python.exe hfu_trigger_server.py
+Python39\pythonw.exe hfu_trigger_server.pyw

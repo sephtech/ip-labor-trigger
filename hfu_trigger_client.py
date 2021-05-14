@@ -1,6 +1,6 @@
 import threading
 from tkinter import *
-import tkinter as ttk
+from tkinter import ttk
 import socket
 import subprocess
 import sys
@@ -13,7 +13,7 @@ class HFU_Trigger_Client():
 
     def __init__(self, gui=False):
 
-        logging.basicConfig(filename="HFU_Trigger_Client.log", level=logging.DEBUG)
+        logging.basicConfig(filename="hfu_trigger_client.log", level=logging.DEBUG)
 
         try:
             #checks if admin rights are present
@@ -98,7 +98,7 @@ class HFU_Trigger_Client():
         self.tkvar_network.set(choices_network[0])
 
         #dropdown devices
-        self.popupMenu = Listbox(mainframe, selectmode = "multiple", height=5)
+        self.popupMenu = Listbox(mainframe, selectmode = "multiple", height=4)
         self.label_popup1 = Label(mainframe, text="Choose the target devices")
         self.label_popup1.grid(row = 1, column = 1)
         self.popupMenu.grid(row = 2, column =1)
@@ -110,42 +110,67 @@ class HFU_Trigger_Client():
         Label(mainframe, text="").grid(row = 3, column = 1)
         self.popupMenu2 = OptionMenu(mainframe, self.tkvar_network, *choices_network)
         self.label_popup2 = Label(mainframe, text="Choose the network adapter")
-        self.label_popup2.grid(row = 4, column = 1)
-        self.popupMenu2.grid(row = 5, column =1)
+        self.label_popup2.grid(row = 1, column = 2)
+        self.popupMenu2.grid(row = 2, column =2)
 
-        #chackbox for advanced usage
-        Label(mainframe, text="").grid(row = 6, column = 1)
+        #start/stop button
+        Label(mainframe, text="").grid(row = 3, column = 2)
+        ttk.Separator(mainframe,orient=HORIZONTAL).grid(row=4, column=1, columnspan=2, sticky="ew")
+        Label(mainframe, text="").grid(row = 5, column = 1, columnspan=2)
+        self.btn_set = Button(mainframe, text = "Set configuration", command = self.button_set)
+        self.btn_set.grid(row = 6, column = 1)
+        self.btn_reset = Button(mainframe, text = "Reset configuration", state = DISABLED, command = self.button_reset)
+        self.btn_reset.grid(row = 7, column = 1)
+
+        #reset button
+        self.label_reset = Label(mainframe, text = "Perform manual trigger", height = 1)
+        self.label_reset.grid(row = 6, column = 2)
+        self.btn_trigger = Button(mainframe, state=DISABLED, text = "Trigger", command = self.button_trigger)
+        self.btn_trigger.grid(row = 7, column = 2)
+
+        #checkbox for advanced usage
+        Label(mainframe, text="").grid(row = 8, column = 1, columnspan=2)
+        ttk.Separator(mainframe,orient=HORIZONTAL).grid(row=9, column=1, columnspan=2, sticky="ew")
         self.check_btn = Checkbutton(mainframe, text = "Advanced Options", variable = self.tkvar_advanced, onvalue = 1, offvalue = 0, height=2, width = 20)
-        self.check_btn.grid(row = 7, column = 1)
+        self.check_btn.grid(row = 10, column = 1, columnspan=2)
 
         #ip input
         self.label_ip = Label(mainframe, text="IP address:", width = 15, fg = "gray")
-        self.label_ip.grid(row = 8, column = 1)
+        self.label_ip.grid(row = 11, column = 1, columnspan=2)
         self.text_ip = Text(mainframe, state = DISABLED, height = 1, width = 15, bg = "light gray")
-        self.text_ip.grid(row = 9, column = 1)
+        self.text_ip.grid(row = 12, column = 1, columnspan=2)
 
         #port input
         self.label_port = Label(mainframe, text="Port:", width = 15, fg = "gray")
-        self.label_port.grid(row = 10, column = 1)
+        self.label_port.grid(row = 13, column = 1, columnspan=2)
         self.text_port = Text(mainframe, state = DISABLED, height = 1, width = 15, bg = "light gray")
-        self.text_port.grid(row = 11, column = 1)
+        self.text_port.grid(row = 14, column = 1, columnspan=2)
 
-        #start/stop button
-        Label(mainframe, text="").grid(row = 12, column = 1)
-        self.btn_set = Button(mainframe, text = "Set", command = self.button_set)
-        self.btn_set.grid(row = 13, column = 1)
-        self.btn_reset = Button(mainframe, text = "Reset", state = DISABLED, command = self.button_reset)
-        self.btn_reset.grid(row = 14, column = 1)
+        #console text view
+        Label(mainframe, text="").grid(row = 15, column = 1, columnspan=2)
+        ttk.Separator(mainframe,orient=HORIZONTAL).grid(row=16, column=1, columnspan=2, sticky="ew")
+        Label(mainframe, text="", height=1).grid(row = 17, column = 1, columnspan=2)
+        self.console_text = Text(mainframe, height=10)
+        self.console_text.grid(row = 18, column = 1, columnspan=2)
 
-        #reset button
-        Label(mainframe, text="").grid(row = 15, column = 1)
-        self.label_reset = Label(mainframe, text = "Perform manual trigger", height = 1)
-        self.label_reset.grid(row = 16, column = 1)
-        self.btn_trigger = Button(mainframe, state=DISABLED, text = "Trigger", command = self.button_trigger)
-        self.btn_trigger.grid(row = 17, column = 1)
+        #redirecting standard output and standard error to console text view
+        redir = RedirectText(self.console_text)
+        sys.stdout = redir
+        sys.stderr = redir
 
         #trace for the advance usage checkbox
         self.tkvar_advanced.trace('w', self.change_advanced)
+
+        #set default exit on close operation
+        self.root.protocol("WM_DELETE_WINDOW", self.close_application)
+
+    def close_application(self):
+        '''
+        Method for the default close operation of the application window
+        '''
+
+        self.button_reset()
+        self.root.destroy()
 
     def button_set(self, *args):
         '''
@@ -354,7 +379,7 @@ class HFU_Trigger_Client():
                 'netsh', 'advfirewall', 'firewall',
                 'show', 'rule', 'name=HFU_Trigger_Server'
             ], 
-            check=True,
+            #check=True,
             capture_output=True
         )
 
@@ -443,7 +468,7 @@ class HFU_Trigger_Client():
         socketCon = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_address = (ip, port)
         
-        trigger_start_time = time.time()
+        trigger_start_time = int(round(time.time() * 1000))
         logging.info(f"Sending trigger for device {device} to {ip} on port {port}. system time: {trigger_start_time}")
         
         try:
@@ -464,9 +489,9 @@ class HFU_Trigger_Client():
                 received_message = "".join((received_message, data.decode("utf-8")))
                 
             if message == received_message:
-                trigger_stop_time = time.time()
+                trigger_stop_time = int(round(time.time() * 1000))
                 trigger_latency = trigger_stop_time - trigger_start_time
-                logging.info(f"Trigger for device {device} successful. System time: {trigger_stop_time}; Two-way-latency: {trigger_latency}")
+                logging.info(f"Trigger for device {device} successful. System time: {trigger_stop_time}; Two-way-latency: {trigger_latency}ms")
                 
             else:
                 logging.error(f"Trigger to device {device} failed. Messages not matching. Received message: {received_message}")
@@ -477,4 +502,30 @@ class HFU_Trigger_Client():
         finally:
             socketCon.close()
 
-trigger_client = HFU_Trigger_Client(True)
+class RedirectText(object):
+    '''
+    Class for redirecting stdout and stderr to a text view
+    '''
+
+    def __init__(self, text_ctrl):
+        '''
+        Constructor for the redirector
+        '''
+
+        #setting the text view
+        self.output = text_ctrl
+        
+    def write(self, string):
+        '''
+        Write a message to the text view
+        '''
+
+        #writes given text to text view
+        self.output.insert(END, string)
+        self.output.see("end")
+
+    def flush(self):
+        '''
+        Passes the standard flush method of the sys output
+        '''
+        pass

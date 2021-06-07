@@ -11,13 +11,43 @@ import ctypes
 
 class HFU_Trigger_Client():
 
-    def __init__(self, gui=False):
+    def __init__(self, network_adapter = None):
 
         logging.basicConfig(filename="hfu_trigger_client.log", level=logging.DEBUG)
 
+        self.network_adaper = network_adapter
+
         try:
-            #checks if admin rights are present
-            if self.check_elevation():
+            if self.network_adaper == None:
+                #checks if admin rights are present
+                if self.check_elevation():
+                    self.activation = {
+                        'fNIRS':        False, 
+                        'Motion':       False, 
+                        'Eyetracker':   False, 
+                        'Movisens':     False, 
+                        'Driving':      False
+                    }
+
+                    #searches for physical network adapters
+                    logging.debug("Extracting physical network devices...")
+                    self.nics = wmi.WMI().Win32_NetworkAdapter()
+                    self.nic_names = []
+
+                    #writes all physical adapters into a list
+                    for nic in self.nics:
+                        if nic.PhysicalAdapter != False:
+                            self.nic_names.append(nic.ProductName)
+
+                    
+                    logging.debug("Creating GUI Frame...")
+                    self.root = Tk()
+                    self.root.title("Trigger Client")
+                    self.root.minsize(300, 450)
+                    self.build_gui()
+                    self.root.mainloop()
+            
+            else:
                 self.activation = {
                     'fNIRS':        False, 
                     'Motion':       False, 
@@ -36,14 +66,8 @@ class HFU_Trigger_Client():
                     if nic.PhysicalAdapter != False:
                         self.nic_names.append(nic.ProductName)
 
-                if gui:
-                    logging.debug("Creating GUI Frame...")
-                    self.root = Tk()
-                    self.root.title("Trigger Client")
-                    self.root.minsize(300, 450)
-                    self.build_gui()
-                    self.root.mainloop()
-            
+                self.configure_no_gui(self.network_adaper)
+
         except:
             logging.exception("ERROR during program execution!")
 
@@ -69,6 +93,17 @@ class HFU_Trigger_Client():
         except:
             logging.exception("Elevation process failed. ")
             sys.exit()
+
+    def configure_no_gui(self, adapter_name, set=True):
+        '''
+        '''
+
+        if set:
+            ip, port = self.set_network_options(adapter_name)
+            self.set_firewall_rule(port)
+        else:
+            ip, port = self.set_network_options(adapter_name, False)
+            self.set_firewall_rule(port, False)
 
     def build_gui(self):
         '''
@@ -323,13 +358,15 @@ class HFU_Trigger_Client():
 
         #uses default ip if no ip is given in the advanced text input
         ip = '192.168.1.20'
-        if self.text_ip.get("1.0",END) != '\n':
-            ip = self.text_ip.get("1.0",END)
+        if self.network_adaper == None:
+            if self.text_ip.get("1.0",END) != '\n':
+                ip = self.text_ip.get("1.0",END)
 
         #uses default port if no port is given in the advanced text input
         port = 10001
-        if self.text_port.get("1.0",END) != '\n':
-            port = int(self.text_port.get("1.0",END))
+        if self.network_adaper == None:
+            if self.text_port.get("1.0",END) != '\n':
+                port = int(self.text_port.get("1.0",END))
 
         #searches for the windows network config matching with the given adapter
         for nic in self.nics:

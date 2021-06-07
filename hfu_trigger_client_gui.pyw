@@ -1,4 +1,4 @@
 from hfu_trigger_client import HFU_Trigger_Client
 import hfu_trigger_client
 
-hfu_trigger_client.HFU_Trigger_Client(True)
+hfu_trigger_client.HFU_Trigger_Client()

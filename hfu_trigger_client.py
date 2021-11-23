@@ -311,7 +311,7 @@ class HFU_Trigger_Client():
         self.change_advanced()
 
     def button_trigger(self):
-        self.sendTrigger("M", "Manual Trigger")
+        self.sendTrigger("M", "Manual_Trigger")
 
     def change_advanced(self):
         '''

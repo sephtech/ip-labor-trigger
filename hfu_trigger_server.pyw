@@ -99,7 +99,7 @@ class HFU_Trigger_Server():
         self.tkvar_advanced = IntVar(self.root)
 
         #dictionarys with dropdown options
-        choices_devices = ('fNIRS', 'Movisens EKG/EDA', 'Fahrsimulator', 'Motiontracker/EMG')
+        choices_devices = ('fNIRS', 'Movisens EKG/EDA', 'Eyetracker', 'Fahrsimulator', 'Motiontracker/EMG')
         choices_network = (self.nic_names)
 
         #sets the default options
@@ -440,13 +440,16 @@ class HFU_Trigger_Server():
         switcher = {
 
             'fNIRS': 'Start Oxysoft with administrator rights.\n'
-                        'Start a measurement and change to the XXXX view.\n'
+                        'Start a measurement and change to the DAQ_Status view.\n'
                         'Send a test trigger and check if it arrived.',
             'Movisens EKG/EDA': 'Start the measurement in Movisens Sensor Manager.\n'
                                     'Send a test trigger and check if it arrived.\n'
                                     'The triggers will be stored in this directory as csv files.\n'
                                     'You have to restart this server for every participant.',
-            'Eyetracker': 'Coming soon...',
+            'Eyetracker': 'Start D-Lab and include a network task to your project.\n'
+                                    'Make sure that the network task refers to the ip address localhost or 127.0.0.1\n'
+                                    'and port 9000. If this is not choosable, disconnect all networks and try again.\n'
+                                    'Start the measurement in D-Lab.',
             'Motiontracker/EMG': 'Start CAPTIV with administrator rights.\n'
                                     'Start a measurement and place the cursor above the trigger button.\n'
                                     'Make sure that the CAPTIV window is in foreground.\n'
@@ -639,10 +642,26 @@ class HFU_Trigger_Server():
         '''
         Performs the trigger action on this device for the Eyetracker Software
 
-        param message -> received trigger message from the remot client
+        param message -> received trigger message from the remote client
         '''
 
-        pass
+        socket_local = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_address_local = ("localhost", 9000)
+        
+        trigger_start_time_local = int(round(time.time() * 1000))
+        logging.info(f"Redirecting trigger to D-Lab on localhost, port 9000. system time: {trigger_start_time_local}")
+        
+        try:
+            socket_local.connect(server_address_local)
+            message_local = "{}\0".format(message[1])
+
+            socket_local.sendall(message_local.encode("utf-8"))
+                
+        except:
+            logging.exception("Error while redirecting trigger to D-Lab")
+                
+        finally:
+            socket_local.close()
 
 class RedirectText(object):
     '''

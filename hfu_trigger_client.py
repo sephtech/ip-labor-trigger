@@ -126,7 +126,7 @@ class HFU_Trigger_Client():
         self.tkvar_advanced = IntVar(self.root)
 
         #dictionarys with dropdown options
-        choices_devices = ('fNIRS', 'Movisens EKG/EDA', 'Driving Simulator', 'Motiontracker/EMG')
+        choices_devices = ('fNIRS', 'Movisens EKG/EDA', 'Eyetracker', 'Driving Simulator', 'Motiontracker/EMG')
         choices_network = (self.nic_names)
 
         #sets the default options

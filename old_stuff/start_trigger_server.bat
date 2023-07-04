@@ -1,0 +1,1 @@
+Python39\pythonw.exe hfu_trigger_server.pyw

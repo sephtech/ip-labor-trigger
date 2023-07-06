@@ -1,0 +1,3 @@
+*.pyc
+sockettest_client.py
+sockettest_server.py

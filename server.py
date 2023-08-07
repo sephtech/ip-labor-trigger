@@ -2,6 +2,7 @@ import sys
 import threading
 import socket
 from dataclasses import dataclass
+from db import Database
 
 
 @dataclass
@@ -25,6 +26,8 @@ class Server():
         self.shareThread = None
         # self.sendThread = None
         # self.recvThread = None'
+        self.db = Database()
+        self.db.show()
 
     def startScanning(self):
         self.scanThread = threading.Thread(target=self.scanClients,
@@ -32,18 +35,27 @@ class Server():
         self.scanThread.start()
         return self.scanThread
 
-    def addClientToList(self, client):
-        global shareBuffer
-        checkTup = (client.name, client.ip)
-        if checkTup not in [(c.name, c.ip) for c in self.clients]:
-            self.clients.append(client)
-            shareBuffer.append(client)
+    def addClientToList(self, client, db):
+        # Wiederholter INSERT Befehl an Datenbank
+        db.addDevice(client.name, client.ip, 0)
+
+        # Check in Liste vielleicht schneller?
+        # global shareBuffer
+        # checkTup = (client.name, client.ip)
+        # if checkTup not in [(c.name, c.ip) for c in self.clients]:
+        #     self.clients.append(client)
+        #     shareBuffer.append(client)
 
     def printClientList(self):
-        for c in self.clients:
-            print(c)
+        db = Database()
+        print(db.select("""
+                             SELECT * FROM devices;
+                             """))
+        # for c in self.clients:
+        #     print(c)
 
     def scanClients(self):
+        db = Database()
         message = '{}'.format(self.netName)
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(0.5)
@@ -76,7 +88,8 @@ class Server():
                                                         address[0],
                                                         0,
                                                         0,
-                                                        False))
+                                                        False),
+                                             db)
             except Exception as e:
                 print('Exception thrown: %s' % e)
                 break
@@ -99,6 +112,7 @@ def main(serverName):
     print(list)
     print()
     s.printClientList()
+
     pass
 
 

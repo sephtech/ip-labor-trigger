@@ -2,22 +2,23 @@ import sqlite3
 
 
 class Database():
-    def __init__(self):
-        self.con = sqlite3.connect(".\\database\\serverDatabase.db")
+    def __init__(self, path):
+        self.path = path
+        self.con = sqlite3.connect(self.path)
         self.cur = self.con.cursor()
         self.createTables()
 
-    def addDevice(self, device_Name, device_IP, device_Port):
+    def addDevice(self, device_Name, device_IP, device_Port, sessionID):
         statement = """
-            IF NOT EXISTS
-                (SELECT 1 FROM devices WHERE name = '{}' AND ip = '{}')
-            BEGIN
-                INSERT INTO devices (name, ip, port)
-                VALUES ('{}', '{}', {})
-            END
-        """.format(device_Name, device_IP, device_Name, device_IP, device_Port)
-        print(statement)
-        self.insert(statement)
+            INSERT INTO devices (name, ip, port, sessionID)
+            VALUES ('{}', '{}', {}, {})
+        """.format(device_Name, device_IP, device_Port, sessionID)
+        # print(statement)
+        try:
+            self.insert(statement)
+            return True
+        except Exception:
+            return False
 
     def getDevice(self, device_ID):
         statement = """SELECT FROM devices WHERE device_ID = {};""".format(
@@ -65,6 +66,7 @@ class Database():
                 ip TEXT NOT NULL,
                 port INTEGER,
                 sessionID INTEGER NOT NULL,
+                UNIQUE (name, ip, sessionID),
                 FOREIGN KEY (sessionID) REFERENCES sessions (id));
         """,
             """

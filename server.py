@@ -3,14 +3,14 @@ import threading
 import socket
 from dataclasses import dataclass
 from db import Database
+import time
 
 
 @dataclass
 class ClientInfo:
     name: str
     ip: str
-    sendPort: int
-    recvPort: int
+    port: int
     connected: bool
 
 
@@ -25,9 +25,21 @@ class Server():
         self.scanThread = None
         self.shareThread = None
         # self.sendThread = None
-        # self.recvThread = None'
-        self.db = Database()
-        self.db.show()
+        # self.recvThread = None
+        # open database
+        self.dbPath = ".\\database\\{}.db".format(self.netName)
+        # create new session entry
+        db = Database(self.dbPath)
+        db.insert(
+            """
+            INSERT INTO sessions (starttime)
+            VALUES ({})""".format(time.time()))
+        # get the current sessions id
+        self.sessionID = db.select("""
+                                SELECT MAX(id)
+                                FROM sessions
+                                """)[0][0]
+        db.show()
 
     def startScanning(self):
         self.scanThread = threading.Thread(target=self.scanClients,
@@ -36,27 +48,17 @@ class Server():
         return self.scanThread
 
     def addClientToList(self, client, db):
-        # Wiederholter INSERT Befehl an Datenbank
-        db.addDevice(client.name, client.ip, 0)
-
-        # Check in Liste vielleicht schneller?
-        # global shareBuffer
-        # checkTup = (client.name, client.ip)
-        # if checkTup not in [(c.name, c.ip) for c in self.clients]:
-        #     self.clients.append(client)
-        #     shareBuffer.append(client)
+        # Einfügen in Datenbank
+        db.addDevice(client.name, client.ip, client.port, self.sessionID)
 
     def printClientList(self):
-        db = Database()
+        db = Database(self.dbPath)
         print(db.select("""
                              SELECT * FROM devices;
                              """))
-        # for c in self.clients:
-        #     print(c)
 
     def scanClients(self):
-        db = Database()
-        message = '{}'.format(self.netName)
+        db = Database(self.dbPath)
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(0.5)
         sock.setsockopt(socket.IPPROTO_IP,
@@ -64,12 +66,13 @@ class Server():
                         2)
         # Thread main loop
         counter = 0
+        message = '{}'.format(self.netName)
         while counter < 10:
             try:
                 port = 5000
-                for port in range(5000, 5050):
-                    sock.sendto(message.encode('utf-8'),
-                                ('224.1.1.1', port))
+                # for port in range(5000, 5050):
+                sock.sendto(message.encode('utf-8'),
+                            ('224.1.1.1', port))
                 # Receiving loop
                 while True:
                     try:
@@ -87,33 +90,99 @@ class Server():
                         self.addClientToList(ClientInfo(data,
                                                         address[0],
                                                         0,
-                                                        0,
                                                         False),
                                              db)
+                        # Start a thread to share the port
+
             except Exception as e:
                 print('Exception thrown: %s' % e)
                 break
             counter += 1
 
+    def sharePort():
+        pass
+
+    def issueTrigger(self, text):
+        thread = threading.Thread(target=self.triggerThread,
+                                  args=(text,))
+        thread.start()
+        return thread
+
+    def triggerThread(self, text):
+        start = round(time.time() * 1000)
+        db = Database(self.dbPath)
+        statement = """
+                INSERT INTO triggers (text, issuetime, sessionID)
+                VALUES ('{}', {}, {})
+                """.format(text, time.time(), self.sessionID)
+        db.insert(statement)
+        id = db.select("""
+                    SELECT MAX(id)
+                    FROM triggers
+                    """)[0][0]
+
+        clientList = db.select("""SELECT *
+                               FROM devices
+                               WHERE sessionID = {}
+                               """.format(self.sessionID))
+
+        # Send trigger message
+        port = 50000
+        triggerList = []
+        for client in clientList:
+            t = threading.Thread(target=self.sendTrigger,
+                                 args=(text, (client[2], port), ))
+            t.start()
+            triggerList.append(t)
+
+        # check if there are still active triggers
+        while len(triggerList) > 0:
+            for t in triggerList:
+                if not t.is_alive():
+                    triggerList.remove(t)
+
+        # calculate latency and add to trigger database entry
+        latency = round(time.time() * 1000) - start
+        print(latency)
+        statement = """UPDATE triggers
+                SET latency={}
+                WHERE id = {};
+                """.format(latency, id)
+        db.insert(statement)
+
+    def sendTrigger(self, text, clientinfo):
+        start = round(time.time() * 1000)
+        sock = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(clientinfo)
+        print(round(time.time() * 1000) - start)
+        sock.send(text.encode('UTF-8'))
+        print(round(time.time() * 1000) - start)
+        sock.recv(100)
+        print(round(time.time() * 1000) - start)
+
 
 def main(serverName):
-    global shareBuffer
-    shareBuffer = []
     s = Server(serverName)
-    scan_thread = s.startScanning()
-    list = []
-    while scan_thread.is_alive():
-        try:
-            list.append(shareBuffer.pop())
-            # print(list)
-        except Exception:
-            pass
-    print()
-    print(list)
+    scanThread = s.startScanning()
+    while scanThread.is_alive():
+        pass
     print()
     s.printClientList()
 
-    pass
+    print('Issue triggers')
+    # triggerList = []
+    # for i in range(1, 20):
+    #     triggerList.append(s.issueTrigger("{} Triggertext".format(i)))
+    #     time.sleep(3)
+
+    # while len(triggerList) > 0:
+    #     for t in triggerList:
+    #         if not t.is_alive():
+    #             triggerList.remove(t)
+    t = s.issueTrigger("{} Triggertext".format(1))
+    while t.is_alive():
+        pass
 
 
 if __name__ == '__main__':
